@@ -32,7 +32,10 @@ final class ConformanceTests: XCTestCase {
 
     // ── outils ─────────────────────────────────────────────────────────────
 
+    private var t0 = Date()
+
     private func configure() {
+        t0 = Date()
         Stamina.configure(StaminaConfig(apiKey: apiKey, endpoint: server.base.absoluteString))
     }
 
@@ -44,10 +47,10 @@ final class ConformanceTests: XCTestCase {
         await MainActor.run { NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil) }
     }
 
-    /// Avance l'horloge du SDK de `seconds` par rapport à maintenant.
+    /// Horloge du SDK = instant du configure() + `seconds` (indépendant de la durée réelle des tests).
     private func timeTravel(_ seconds: TimeInterval) async {
-        let base = Date()
-        await Stamina.client._setNow { base.addingTimeInterval(seconds) }
+        let at = t0.addingTimeInterval(seconds)
+        await Stamina.client._setNow { at }
     }
 
     private func body(_ call: [String: Any]) -> [String: Any] { call["body"] as? [String: Any] ?? [:] }
