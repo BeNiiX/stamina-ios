@@ -113,7 +113,9 @@ actor StaminaClient {
 
     static func userAgent() -> String {
         let bundle = Bundle.main.bundleIdentifier ?? "unknown"
-        return "Stamina-iOS/\(staminaSDKVersion) (\(bundle); iOS \(ProcessInfo.processInfo.operatingSystemVersionString))"
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        let os = v.patchVersion > 0 ? "\(v.majorVersion).\(v.minorVersion).\(v.patchVersion)" : "\(v.majorVersion).\(v.minorVersion)"
+        return "Stamina-iOS/\(staminaSDKVersion) (\(bundle); iOS \(os))"
     }
 
     // ── événements ─────────────────────────────────────────────────────────
@@ -260,7 +262,7 @@ actor StaminaClient {
         let webViewUA: Any = (config.webviewUserAgent ?? s.webViewUserAgent).map { $0 as Any } ?? NSNull()
         let adServicesToken: Any = (config.adservicesToken ?? s.adServicesToken).map { $0 as Any } ?? NSNull()
         var extras: [String: Any] = [
-            "sdk_platform": "ios",
+            "sdk_platform": config.sdkPlatform.isEmpty ? "ios" : config.sdkPlatform,
             "sdk_version": staminaSDKVersion,
             "att_status": s.attStatus.rawValue,
         ]

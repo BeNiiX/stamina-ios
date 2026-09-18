@@ -28,6 +28,8 @@ public struct StaminaConfig {
     public var adservicesToken: String?
     /// User-agent WebView si l'app le lit déjà elle-même (sinon collecté par le SDK).
     public var webviewUserAgent: String?
+    /// Réservé aux wrappers (Flutter, React Native) : valeur de `extras.sdk_platform`. Défaut `ios`.
+    public var sdkPlatform: String = "ios"
 
     public init(
         apiKey: String,
