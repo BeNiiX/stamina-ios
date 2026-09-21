@@ -2,7 +2,7 @@
 
 Une ligne à intégrer, zéro dépendance, rien à brancher : install attribué (Apple Search Ads via
 AdServices, liens de tracking via matching), sessions, revenu par source d'acquisition.
-Spécification commune à tous les SDK : `../docs/13-SPEC-SDK.md`.
+Même comportement que les SDK STAMINA React Native, Android et Flutter (spécification et suite de conformité communes).
 
 ## Installation
 
