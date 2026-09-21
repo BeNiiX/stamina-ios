@@ -108,3 +108,7 @@ Tests : 5 unitaires (`EventsTests`) + 9 scénarios de conformité (`ConformanceT
 pour piloter ATT/IDFA, vrais UserDefaults/UIKit/WKWebView du simulateur). Le jeton AdServices et
 l'IDFA réels n'existent que sur appareil : à vérifier avec une vraie campagne Apple Search Ads
 (page Installs du dashboard → « Apple Search Ads · Certain »).
+
+## Licence
+
+MIT — voir `LICENSE`.
