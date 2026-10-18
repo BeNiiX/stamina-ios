@@ -6,7 +6,7 @@
 // jamais. Seul le réseau est asynchrone ; le drapeau `flushing` empêche deux envois simultanés.
 import Foundation
 
-public let staminaSDKVersion = "1.0.0"
+public let staminaSDKVersion = "1.1.0"
 
 actor StaminaClient {
     static let sessionTimeout: TimeInterval = 30 * 60
@@ -33,6 +33,8 @@ actor StaminaClient {
     private var flushTimer: Task<Void, Never>?
     private var installRetry: Task<Void, Never>?
     private var adIdSyncing = false
+    /// Copie mémoire de la file persistée : évite de redécoder le JSON à chaque événement.
+    private var queueCache: [[String: Any]]?
 
     init(storage: StaminaStorage = UserDefaultsStorage(), signals: SignalsProviding = DeviceSignals()) {
         self.storage = storage
@@ -41,7 +43,7 @@ actor StaminaClient {
 
     // ── hooks de test ──────────────────────────────────────────────────────
 
-    func _setStorage(_ s: StaminaStorage) { storage = s }
+    func _setStorage(_ s: StaminaStorage) { storage = s; queueCache = nil }
     func _setSignals(_ s: SignalsProviding) { signals = s }
     func _setNow(_ f: @escaping () -> Date) { now = f }
 
@@ -54,13 +56,7 @@ actor StaminaClient {
             Log.warn("configure: apiKey manquante — SDK inactif.")
             return
         }
-        // configure() rappelé : on repart propre, sans doubler observateurs ni timers
-        lifecycle?.stop()
-        lifecycle = nil
-        flushTimer?.cancel()
-        flushTimer = nil
-        installRetry?.cancel()
-        installRetry = nil
+        stopTimers() // configure() rappelé : on repart propre, sans doubler observateurs ni timers
 
         self.config = config
         let endpoints = config.endpoint.map { [$0.hasSuffix("/") ? String($0.dropLast()) : $0] } ?? Transport.defaultEndpoints
@@ -85,14 +81,11 @@ actor StaminaClient {
         if sessionsEnabled { startSessionIfNeeded() }
         Task { await self.maybeSyncAdvertisingId() }
 
-        // identité client en attente (échec précédent) → retry
-        if let c = config.customerUserId, !c.isEmpty {
-            Task { await self.setCustomerUserId(c) }
-        } else if let pending = storage.get(Keys.pendingCustomerId), !pending.isEmpty {
-            Task { await self.setCustomerUserId(pending) }
+        // identité client / IDFA en attente (échec réseau précédent) → retry
+        if let customer = config.customerUserId.flatMap({ $0.isEmpty ? nil : $0 }) ?? storage.get(Keys.pendingCustomerId) {
+            Task { await self.setCustomerUserId(customer) }
         }
-        // IDFA obtenu après l'install mais non transmis (réseau) → retry
-        if let pendingAd = storage.get(Keys.pendingAdvertisingId), !pendingAd.isEmpty {
+        if let pendingAd = storage.get(Keys.pendingAdvertisingId) {
             Task { await self.sendAdvertisingId(pendingAd) }
         }
 
@@ -146,22 +139,26 @@ actor StaminaClient {
 
     /// Lecture tolérante : une file corrompue est remise à zéro, jamais une exception.
     private func readQueue() -> [[String: Any]] {
-        guard let raw = storage.get(Keys.queue), let data = raw.data(using: .utf8) else { return [] }
-        if let arr = JSON.decode(data) as? [[String: Any]] {
-            return arr.filter { $0["name"] is String }
+        if let queueCache { return queueCache }
+        var queue: [[String: Any]] = []
+        if let raw = storage.get(Keys.queue), let data = raw.data(using: .utf8) {
+            if let arr = JSON.decode(data) as? [[String: Any]] {
+                queue = arr.filter { $0["name"] is String }
+            } else {
+                Log.warn("file d'événements corrompue — réinitialisée.")
+                storage.remove(Keys.queue)
+            }
         }
-        Log.warn("file d'événements corrompue — réinitialisée.")
-        storage.remove(Keys.queue)
-        return []
+        queueCache = queue
+        return queue
     }
 
     private func writeQueue(_ queue: [[String: Any]]) {
-        if queue.isEmpty {
-            storage.remove(Keys.queue)
-            return
-        }
         let trimmed = Array(queue.suffix(StaminaClient.maxQueue))
-        if let data = JSON.encode(trimmed), let s = String(data: data, encoding: .utf8) {
+        queueCache = trimmed
+        if trimmed.isEmpty {
+            storage.remove(Keys.queue)
+        } else if let data = JSON.encode(trimmed), let s = String(data: data, encoding: .utf8) {
             storage.set(Keys.queue, s)
         }
     }
@@ -259,35 +256,24 @@ actor StaminaClient {
             if let given = config.advertisingId, !given.isEmpty, !isZeroAdId(given) { return given }
             return s.advertisingId
         }()
-        let webViewUA: Any = (config.webviewUserAgent ?? s.webViewUserAgent).map { $0 as Any } ?? NSNull()
-        let adServicesToken: Any = (config.adservicesToken ?? s.adServicesToken).map { $0 as Any } ?? NSNull()
-        var extras: [String: Any] = [
-            "sdk_platform": config.sdkPlatform.isEmpty ? "ios" : config.sdkPlatform,
-            "sdk_version": staminaSDKVersion,
-            "att_status": s.attStatus.rawValue,
-        ]
-        extras["app_version"] = s.appVersion ?? NSNull()
-        extras["app_build"] = s.appBuild ?? NSNull()
-        let payload: [String: Any] = [
+        var payload = s.deviceFields
+        let extra: [String: Any?] = [
             "device_user_id": currentDeviceUserId(),
-            "os_version": s.osVersion ?? NSNull(),
-            "device_model": s.deviceModel ?? NSNull(),
-            "device_manufacturer": s.manufacturer ?? NSNull(),
-            "screen_w": s.screenW ?? NSNull(),
-            "screen_h": s.screenH ?? NSNull(),
-            "screen_scale": s.screenScale ?? NSNull(),
-            "color_scheme": s.colorScheme ?? NSNull(),
-            "locale": s.locale ?? NSNull(),
-            "timezone": s.timezone ?? NSNull(),
-            "webview_user_agent": webViewUA,
-            "install_referrer": NSNull(),
-            "idfv": s.vendorId ?? NSNull(),
-            "adservices_token": adServicesToken,
-            "idfa": adId ?? NSNull(),
-            "gaid": NSNull(),
-            "customer_user_id": config.customerUserId ?? NSNull(),
-            "extras": extras,
+            "webview_user_agent": config.webviewUserAgent ?? s.webViewUserAgent,
+            "install_referrer": nil,
+            "adservices_token": config.adservicesToken ?? s.adServicesToken,
+            "idfa": adId,
+            "gaid": nil,
+            "customer_user_id": config.customerUserId,
+            "extras": [
+                "sdk_platform": platform,
+                "sdk_version": staminaSDKVersion,
+                "att_status": s.attStatus.rawValue,
+                "app_version": s.appVersion ?? NSNull(),
+                "app_build": s.appBuild ?? NSNull(),
+            ] as [String: Any],
         ]
+        payload.merge(extra.mapValues { $0 ?? NSNull() }) { _, new in new }
         do {
             let res = try await transport.request("/v1/sdk/install", method: "POST", body: payload)
             if res.ok {
@@ -367,20 +353,23 @@ actor StaminaClient {
     }
 
     private func sendAdvertisingId(_ id: String) async {
-        guard !id.isEmpty, !isZeroAdId(id), !disabled, let transport else { return }
-        do {
-            let res = try await transport.request("/v1/sdk/identify", method: "POST", body: [
-                "device_user_id": currentDeviceUserId(), "advertising_id": id,
-            ])
-            if res.ok {
-                storage.set(Keys.advertisingIdSent, id)
-                storage.remove(Keys.pendingAdvertisingId)
-            } else {
-                storage.set(Keys.pendingAdvertisingId, id)
-            }
-        } catch {
-            storage.set(Keys.pendingAdvertisingId, id)
+        guard !isZeroAdId(id) else { return }
+        if await identify("advertising_id", id, pendingKey: Keys.pendingAdvertisingId) {
+            storage.set(Keys.advertisingIdSent, id)
         }
+    }
+
+    /// `/v1/sdk/identify` pour un champ ; en cas d'échec la valeur reste sous `pendingKey` et repart
+    /// au prochain configure().
+    @discardableResult
+    private func identify(_ field: String, _ value: String, pendingKey: String) async -> Bool {
+        guard !value.isEmpty, !disabled, let transport else { return false }
+        let res = try? await transport.request("/v1/sdk/identify", method: "POST", body: [
+            "device_user_id": currentDeviceUserId(), field: value,
+        ])
+        let ok = res?.ok ?? false
+        if ok { storage.remove(pendingKey) } else { storage.set(pendingKey, value) }
+        return ok
     }
 
     func requestTrackingAuthorization() async -> Bool {
@@ -392,15 +381,7 @@ actor StaminaClient {
     func trackingStatus() -> TrackingStatus { signals.trackingStatus() }
 
     func setCustomerUserId(_ customerUserId: String) async {
-        guard !customerUserId.isEmpty, !disabled, let transport else { return }
-        do {
-            let res = try await transport.request("/v1/sdk/identify", method: "POST", body: [
-                "device_user_id": currentDeviceUserId(), "customer_user_id": customerUserId,
-            ])
-            if res.ok { storage.remove(Keys.pendingCustomerId) } else { storage.set(Keys.pendingCustomerId, customerUserId) }
-        } catch {
-            storage.set(Keys.pendingCustomerId, customerUserId)
-        }
+        await identify("customer_user_id", customerUserId, pendingKey: Keys.pendingCustomerId)
     }
 
     // ── attribution ────────────────────────────────────────────────────────
@@ -441,18 +422,10 @@ actor StaminaClient {
 
     func deviceInfo() async -> [String: Any] {
         let s = await signals.collect()
-        var out: [String: Any] = ["sdk_platform": "ios", "sdk_version": staminaSDKVersion, "att_status": s.attStatus.rawValue]
-        out["os_version"] = s.osVersion ?? NSNull()
-        out["device_model"] = s.deviceModel ?? NSNull()
-        out["device_manufacturer"] = s.manufacturer ?? NSNull()
-        out["screen_w"] = s.screenW ?? NSNull()
-        out["screen_h"] = s.screenH ?? NSNull()
-        out["screen_scale"] = s.screenScale ?? NSNull()
-        out["color_scheme"] = s.colorScheme ?? NSNull()
-        out["locale"] = s.locale ?? NSNull()
-        out["timezone"] = s.timezone ?? NSNull()
-        out["webview_user_agent"] = s.webViewUserAgent ?? NSNull()
-        out["idfv"] = s.vendorId ?? NSNull()
+        var out = s.deviceFields
+        out["sdk_platform"] = platform
+        out["sdk_version"] = staminaSDKVersion
+        out["att_status"] = s.attStatus.rawValue
         out["app_version"] = s.appVersion ?? NSNull()
         out["app_build"] = s.appBuild ?? NSNull()
         out["has_adservices_token"] = s.adServicesToken != nil
@@ -463,6 +436,7 @@ actor StaminaClient {
     /// Reset complet (y compris kill-switch et device id).
     func clearData() {
         Keys.all.forEach(storage.remove)
+        queueCache = nil
         deviceUserId = nil
         disabled = false
         flushFailCount = 0
@@ -471,12 +445,22 @@ actor StaminaClient {
 
     /// Coupe timers et observateurs (tests / réinitialisation).
     func destroy() {
+        stopTimers()
+        configured = false
+    }
+
+    private func stopTimers() {
         flushTimer?.cancel()
         flushTimer = nil
         installRetry?.cancel()
         installRetry = nil
         lifecycle?.stop()
         lifecycle = nil
-        configured = false
+    }
+
+    /// Valeur de `extras.sdk_platform` : `ios`, ou celle du wrapper (Flutter, React Native).
+    private var platform: String {
+        guard let p = config?.sdkPlatform, !p.isEmpty else { return "ios" }
+        return p
     }
 }

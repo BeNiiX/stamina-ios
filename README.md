@@ -10,7 +10,7 @@ Même comportement que les SDK STAMINA React Native, Android et Flutter (spécif
 `https://github.com/BeNiiX/stamina-ios.git` (ou dans `Package.swift`) :
 
 ```swift
-.package(url: "https://github.com/BeNiiX/stamina-ios.git", from: "1.0.0")
+.package(url: "https://github.com/BeNiiX/stamina-ios.git", from: "1.1.0")
 ```
 
 **CocoaPods** :
@@ -41,7 +41,7 @@ Stamina.trackOnboardingStep("choose_goal", step: 2)
 let attribution = await Stamina.attribution()
 ```
 
-### RevenueCat (obligatoire pour le revenu)
+### Revenu, cas 1 : RevenueCat
 
 Le SDK n'importe pas RevenueCat : passez-lui un pont de 4 méthodes autour de `Purchases.shared`,
 **après** `Purchases.configure`, et à chaque `logIn` / `logOut` de l'app :
@@ -62,6 +62,21 @@ await Stamina.linkRevenueCat(RevenueCatBridge())
 Tous les cas sont couverts (RC anonyme → aliasé sur l'id STAMINA ; id maison → retenu comme
 `customer_user_id`) et l'attribut abonné `stamina_device_user_id` est toujours posé.
 
+### Revenu, cas 2 : StoreKit 2 seul, sans RevenueCat
+
+Apple envoie chaque achat, essai, renouvellement, résiliation et remboursement au serveur STAMINA
+(App Store Server Notifications V2). Dans l'app, il suffit de passer le jeton STAMINA à l'achat :
+
+```swift
+let options: Set<Product.PurchaseOption> = await Stamina.appAccountToken().map { [.appAccountToken($0)] } ?? []
+let result = try await product.purchase(options: options)
+```
+
+Puis, dans App Store Connect → l'app → Informations sur l'app → **Notifications du serveur de
+l'App Store**, collez `https://api.getstamina.io/v1/integrations/appstore/notifications/<app_id>`
+en **Production** et en **Sandbox**, version 2. Le serveur vérifie la signature Apple et le bundle id.
+N'envoyez pas en plus `sendEvent("purchase", params: ["revenue": …])` : l'achat compterait deux fois.
+
 ### ATT / IDFA : rien à faire
 
 Quel que soit le code qui affiche le prompt ATT (le vôtre, AppsFlyer…), le SDK relit le statut au
@@ -80,6 +95,7 @@ relecture. Ni l'un ni l'autre n'est nécessaire.
 | `trackOnboardingStep(_:step:params:)` | Étape d'onboarding typée |
 | `setCustomerUserId(_:)` | Id interne (opaque/hashé), retry automatique |
 | `linkRevenueCat(_:logIn:)` | Identité partagée RevenueCat |
+| `appAccountToken()` | Jeton d'achat StoreKit 2 (revenu sans RevenueCat) |
 | `attribution()` / `refreshAttribution()` | Attribution de l'install |
 | `requestTrackingAuthorization()` / `trackingStatus` / `syncAdvertisingId()` | ATT (facultatif) |
 | `sendTestEvent()` / `deviceInfo()` | Diagnostic |

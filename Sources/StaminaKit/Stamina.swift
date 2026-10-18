@@ -4,6 +4,7 @@
 //   Stamina.sendEvent("purchase", params: ["revenue": 9.99, "currency": "EUR"])
 //   Stamina.trackOnboardingStep("choose_goal", step: 2)
 //   await Stamina.linkRevenueCat(bridge)                          // identité partagée RevenueCat
+//   product.purchase(options: [.appAccountToken(token)])          // StoreKit seul : Stamina.appAccountToken()
 //
 // Rien d'autre à brancher : sessions, install, jeton AdServices, IDFA après le consentement ATT
 // (quel que soit le code qui affiche le prompt), file hors ligne, kill-switch — tout est automatique.
@@ -161,6 +162,25 @@ public enum Stamina {
             Log.warn("linkRevenueCat: setAttributes a échoué (\(error))")
         }
         return LinkRevenueCatResult(deviceUserId: deviceUserId, appUserId: appUserId, method: method, attributeSet: attributeSet)
+    }
+
+    // ── StoreKit (sans RevenueCat) ─────────────────────────────────────────
+
+    /// Jeton à passer à chaque achat StoreKit 2 pour rattacher le revenu à l'install :
+    ///
+    ///     let token = await Stamina.appAccountToken()
+    ///     try await product.purchase(options: token.map { [.appAccountToken($0)] } ?? [])
+    ///
+    /// Apple le recopie dans toutes les transactions de la chaîne, et les App Store Server
+    /// Notifications V2 l'envoient au serveur STAMINA. C'est l'id de l'appareil sous forme d'UUID ;
+    /// nil seulement si `deviceUserId` a été forcé avec une valeur qui n'est pas un UUID.
+    public static func appAccountToken() async -> UUID? {
+        let id = await deviceUserId()
+        guard let uuid = UUID(uuidString: id) else {
+            Log.warn("appAccountToken: deviceUserId \"\(id)\" n'est pas un UUID — achat non rattachable.")
+            return nil
+        }
+        return uuid
     }
 
     // ── ATT / identifiants ─────────────────────────────────────────────────

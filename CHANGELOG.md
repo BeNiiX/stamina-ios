@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0 — 2026-10-18
+
+- `Stamina.appAccountToken()` : jeton à passer à `product.purchase(options:)` pour les apps StoreKit 2
+  sans RevenueCat. Le revenu arrive par les App Store Server Notifications V2, rattaché à l'install.
+- Interne, sans changement de comportement : file d'événements gardée en mémoire (plus de décodage JSON
+  à chaque événement), identify factorisé, champs d'appareil partagés entre l'install et `deviceInfo()`
+  (qui renvoie désormais le bon `sdk_platform` pour Flutter / React Native).
+
 ## 1.0.0 — 2026-09-21
 
 Première version publique.

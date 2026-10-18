@@ -30,6 +30,24 @@ struct CollectedSignals {
     var attStatus: TrackingStatus = .unavailable
     var advertisingId: String?
     var adServicesToken: String?
+
+    /// Champs d'appareil tels qu'ils partent sur le fil — partagés par l'install et `deviceInfo()`.
+    var deviceFields: [String: Any] {
+        let fields: [String: Any?] = [
+            "os_version": osVersion,
+            "device_model": deviceModel,
+            "device_manufacturer": manufacturer,
+            "screen_w": screenW,
+            "screen_h": screenH,
+            "screen_scale": screenScale,
+            "color_scheme": colorScheme,
+            "locale": locale,
+            "timezone": timezone,
+            "webview_user_agent": webViewUserAgent,
+            "idfv": vendorId,
+        ]
+        return fields.mapValues { $0 ?? NSNull() }
+    }
 }
 
 /// Abstraction des signaux : `DeviceSignals` en production, un faux dans les tests de conformité.
