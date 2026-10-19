@@ -6,7 +6,7 @@
 // jamais. Seul le réseau est asynchrone ; le drapeau `flushing` empêche deux envois simultanés.
 import Foundation
 
-public let staminaSDKVersion = "1.1.0"
+public let staminaSDKVersion = "1.1.1"
 
 actor StaminaClient {
     static let sessionTimeout: TimeInterval = 30 * 60

@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'StaminaKit'
-  s.version          = '1.1.0'
+  s.version          = '1.1.1'
   s.summary          = 'STAMINA attribution SDK for iOS — install attribution, sessions, revenue per acquisition source.'
   s.description      = 'Zero-dependency attribution SDK: AdServices (Apple Search Ads), IDFA after ATT, IDFV, WebView UA, persisted event queue, sessions. One line to integrate.'
   s.homepage         = 'https://getstamina.io'

@@ -10,7 +10,7 @@ Même comportement que les SDK STAMINA React Native, Android et Flutter (spécif
 `https://github.com/BeNiiX/stamina-ios.git` (ou dans `Package.swift`) :
 
 ```swift
-.package(url: "https://github.com/BeNiiX/stamina-ios.git", from: "1.1.0")
+.package(url: "https://github.com/BeNiiX/stamina-ios.git", from: "1.1.1")
 ```
 
 **CocoaPods** :

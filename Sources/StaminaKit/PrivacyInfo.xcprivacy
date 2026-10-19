@@ -2,12 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Le SDK lit l'IDFA quand l'utilisateur l'autorise (ATT) : tracking déclaré.
-       NSPrivacyTrackingDomains restera vide tant que le sous-domaine dédié (t.getstamina.io,
-       docs/13-SPEC-SDK.md §12) n'est pas en place : y mettre api.getstamina.io couperait
-       toute la livraison réseau en cas de refus ATT. -->
+  <!-- Pas de tracking déclaré par le SDK : Apple refuse NSPrivacyTracking = true avec une liste de
+       domaines vide (ITMS-91064), et y mettre api.getstamina.io couperait toute la livraison réseau en
+       cas de refus ATT. L'IDFA n'est lu que si l'app hôte a obtenu l'ATT : c'est alors à elle de
+       déclarer le tracking dans son propre manifeste et dans App Store Connect. À revoir avec le
+       sous-domaine dédié (t.getstamina.io, docs/13-SPEC-SDK.md §12). -->
   <key>NSPrivacyTracking</key>
-  <true/>
+  <false/>
   <key>NSPrivacyTrackingDomains</key>
   <array/>
   <key>NSPrivacyCollectedDataTypes</key>
@@ -18,7 +19,7 @@
       <key>NSPrivacyCollectedDataTypeLinked</key>
       <true/>
       <key>NSPrivacyCollectedDataTypeTracking</key>
-      <true/>
+      <false/>
       <key>NSPrivacyCollectedDataTypePurposes</key>
       <array>
         <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
@@ -30,7 +31,7 @@
       <key>NSPrivacyCollectedDataTypeLinked</key>
       <true/>
       <key>NSPrivacyCollectedDataTypeTracking</key>
-      <true/>
+      <false/>
       <key>NSPrivacyCollectedDataTypePurposes</key>
       <array>
         <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
